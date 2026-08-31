@@ -25,6 +25,10 @@ export default function App() {
   const escribiendoTimeout = useRef(null);
 
   useEffect(() => {
+    socket.on('connect', () => console.log('✅ Conectado:', socket.id));
+    socket.on('connect_error', (err) => console.log('❌ Error de conexión:', err.message));
+    socket.on('disconnect', (reason) => console.log('🔌 Desconectado. Razón:', reason));
+    
     socket.on('historial', (historial) => setMensajes(historial));
     socket.on('mensaje', (msg) => setMensajes((prev) => [...prev, msg]));
     socket.on('mensaje-sistema', (textoSistema) => {
