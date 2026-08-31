@@ -7,7 +7,10 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: '*',
+    methods: ['GET', 'POST'],
+    credentials: false,
   },
+  transports: ['websocket', 'polling'],
 });
 
 const PORT = process.env.PORT || 3001;
