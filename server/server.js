@@ -1,9 +1,11 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const webpush = require('web-push');
 
 const app = express();
 const server = http.createServer(app);
+app.use(express.json());
 
 const io = new Server(server, {
   cors: {
@@ -16,8 +18,24 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
+// Configurar notificaciones push
+webpush.setVapidDetails(
+  'mailto:tucorreo@ejemplo.com',
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
+
 let mensajes = [];
 let usuariosConectados = {};
+let suscripciones = [];
+
+// Endpoint para guardar la suscripción de notificaciones de cada usuario
+app.post('/subscribe', (req, res) => {
+  const sub = req.body;
+  const yaExiste = suscripciones.some((s) => s.endpoint === sub.endpoint);
+  if (!yaExiste) suscripciones.push(sub);
+  res.status(201).json({ ok: true });
+});
 
 io.on('connection', (socket) => {
   console.log(`✅ Nuevo usuario conectado: ${socket.id}`);
@@ -43,6 +61,21 @@ io.on('connection', (socket) => {
     if (mensajes.length > 200) mensajes.shift();
 
     io.emit('mensaje', nuevoMensaje);
+
+    // Enviar notificación push a todos los dispositivos suscritos
+    suscripciones.forEach((sub) => {
+      webpush
+        .sendNotification(
+          sub,
+          JSON.stringify({
+            title: `${data.autor} dice:`,
+            body: data.texto,
+          })
+        )
+        .catch(() => {
+          suscripciones = suscripciones.filter((s) => s.endpoint !== sub.endpoint);
+        });
+    });
   });
 
   socket.on('escribiendo', (nombre) => {
