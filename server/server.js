@@ -6,6 +6,7 @@ const webpush = require('web-push');
 const app = express();
 const server = http.createServer(app);
 app.use(express.json());
+app.use(require('cors')());
 
 const io = new Server(server, {
   cors: {
