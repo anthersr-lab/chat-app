@@ -18,7 +18,6 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3001;
 
-// Configurar notificaciones push
 webpush.setVapidDetails(
   'mailto:tucorreo@ejemplo.com',
   process.env.VAPID_PUBLIC_KEY,
@@ -26,14 +25,14 @@ webpush.setVapidDetails(
 );
 
 let mensajes = [];
-let usuariosConectados = {};
 let suscripciones = [];
 
-// Endpoint para guardar la suscripción de notificaciones de cada usuario
 app.post('/subscribe', (req, res) => {
   const sub = req.body;
+  console.log('🔔 Nueva suscripcion recibida:', sub.endpoint);
   const yaExiste = suscripciones.some((s) => s.endpoint === sub.endpoint);
   if (!yaExiste) suscripciones.push(sub);
+  console.log('📋 Total de suscripciones activas:', suscripciones.length);
   res.status(201).json({ ok: true });
 });
 
@@ -42,17 +41,10 @@ io.on('connection', (socket) => {
 
   socket.emit('historial', mensajes);
 
-  socket.on('unirse', (nombre) => {
-    usuariosConectados[socket.id] = nombre;
-    io.emit('usuarios', Object.values(usuariosConectados));
-    socket.broadcast.emit('mensaje-sistema', `${nombre} se ha unido al chat 👋`);
-  });
-
   socket.on('mensaje', (data) => {
-    console.log('📨 Mensaje recibido en servidor:', data);
     const nuevoMensaje = {
       id: Date.now(),
-      autor: data.autor,
+      autorId: socket.id,
       texto: data.texto,
       hora: new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),
     };
@@ -62,24 +54,26 @@ io.on('connection', (socket) => {
 
     io.emit('mensaje', nuevoMensaje);
 
-    // Enviar notificación push a todos los dispositivos suscritos
+    console.log('📤 Intentando enviar notificacion a', suscripciones.length, 'suscriptores');
     suscripciones.forEach((sub) => {
       webpush
         .sendNotification(
           sub,
           JSON.stringify({
-            title: `${data.autor} dice:`,
+            title: 'Nuevo mensaje',
             body: data.texto,
           })
         )
-        .catch(() => {
+        .then(() => console.log('✅ Notificacion enviada'))
+        .catch((err) => {
+          console.log('❌ Error al enviar notificacion:', err.message);
           suscripciones = suscripciones.filter((s) => s.endpoint !== sub.endpoint);
         });
     });
   });
 
-  socket.on('escribiendo', (nombre) => {
-    socket.broadcast.emit('escribiendo', nombre);
+  socket.on('escribiendo', () => {
+    socket.broadcast.emit('escribiendo');
   });
 
   socket.on('dejo-de-escribir', () => {
@@ -87,12 +81,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    const nombre = usuariosConectados[socket.id];
-    delete usuariosConectados[socket.id];
-    io.emit('usuarios', Object.values(usuariosConectados));
-    if (nombre) {
-      socket.broadcast.emit('mensaje-sistema', `${nombre} salió del chat 👋`);
-    }
     console.log(`❌ Usuario desconectado: ${socket.id}`);
   });
 });
